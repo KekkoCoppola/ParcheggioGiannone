@@ -1,0 +1,305 @@
+package com.giannone.parcheggio.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.giannone.parcheggio.data.model.Prenotazione
+import com.giannone.parcheggio.theme.*
+import com.giannone.parcheggio.ui.viewmodel.ParcheggioViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DettaglioPrenotazioneScreen(
+    prenotazioneId: String,
+    viewModel: ParcheggioViewModel,
+    onBack: () -> Unit,
+    onUscitaRegistrata: () -> Unit
+) {
+    val prenotazioni by viewModel.prenotazioni.collectAsState()
+    val autoAttive by viewModel.autoAttive.collectAsState()
+
+    // Cerca la prenotazione sia tra quelle del giorno che tra quelle attive
+    val prenotazione = remember(prenotazioni, autoAttive, prenotazioneId) {
+        (prenotazioni + autoAttive).firstOrNull { it.id == prenotazioneId }
+    }
+
+    if (prenotazione == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Primary)
+        }
+        return
+    }
+
+    val giaEntrato = prenotazione.statoIngresso
+    var showManualDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Dettaglio Prenotazione", style = MaterialTheme.typography.headlineLarge, color = OnSurface) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Indietro", tint = Primary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            )
+        },
+        containerColor = Background
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Avatar
+            Box(
+                modifier = Modifier
+                    .size(84.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Person, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(48.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "${prenotazione.nome} ${prenotazione.cognome}",
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                color = OnSurface
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Info card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column {
+                    InfoRow(
+                        icon = Icons.Default.Layers,
+                        label = "Piano",
+                        value = prenotazione.piano,
+                        showDivider = true
+                    )
+                    InfoRowTarga(
+                        icon = Icons.Default.Badge,
+                        label = "Targa",
+                        targa = prenotazione.targa,
+                        showDivider = true
+                    )
+                    InfoRow(
+                        icon = Icons.Default.DirectionsCar,
+                        label = "Modello",
+                        value = prenotazione.modelloAuto,
+                        showDivider = false
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // CTA Button
+            if (!giaEntrato) {
+                // Bottone INGRESSO (verde)
+                Button(
+                    onClick = {
+                        viewModel.registraIngresso(prenotazione.id)
+                        onBack()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Tertiary, contentColor = OnTertiary)
+                ) {
+                    Icon(Icons.Default.Login, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ingresso ora", style = MaterialTheme.typography.headlineSmall)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Clicca per confermare l'ingresso del veicolo",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                TextButton(onClick = { showManualDialog = true }) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp), tint = Primary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Inserisci ora manualmente", color = Primary, style = MaterialTheme.typography.bodyMedium)
+                }
+            } else {
+                // Timestamp ingresso
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = SurfaceContainerLow
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Login, contentDescription = null, tint = Tertiary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "Entrato il ${viewModel.formatTimestampFull(prenotazione.timestampIngresso)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = OnSurface
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Bottone USCITA (rosso)
+                Button(
+                    onClick = {
+                        viewModel.registraUscita(prenotazione) {
+                            onUscitaRegistrata()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Error, contentColor = OnError)
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Uscita ora", style = MaterialTheme.typography.headlineSmall)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Clicca per confermare l'uscita del veicolo",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                TextButton(onClick = { showManualDialog = true }) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp), tint = Primary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Inserisci ora manualmente", color = Primary, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Timestamp prenotazione
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = SurfaceContainerLow
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Prenotato il ${viewModel.formatTimestampFull(prenotazione.timestampPrenotazione)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OnSurface
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    showDivider: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(PrimaryContainer.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = OnSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = OnSurface)
+    }
+    if (showDivider) {
+        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = OutlineVariant.copy(alpha = 0.4f))
+    }
+}
+
+@Composable
+private fun InfoRowTarga(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    targa: String,
+    showDivider: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(PrimaryContainer.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = OnSurfaceVariant, modifier = Modifier.weight(1f))
+        // Targa in box stile targa italiana
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = SurfaceContainerHigh,
+            tonalElevation = 0.dp
+        ) {
+            Text(
+                targa,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp),
+                color = OnSurface,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+    }
+    if (showDivider) {
+        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = OutlineVariant.copy(alpha = 0.4f))
+    }
+}
