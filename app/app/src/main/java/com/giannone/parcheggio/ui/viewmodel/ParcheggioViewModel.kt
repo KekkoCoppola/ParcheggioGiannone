@@ -55,6 +55,9 @@ class ParcheggioViewModel : ViewModel() {
     private val _config = MutableStateFlow(Configurazione())
     val config: StateFlow<Configurazione> = _config.asStateFlow()
 
+    private val _prenotazioniLast7Days = MutableStateFlow<List<Prenotazione>>(emptyList())
+    val prenotazioniLast7Days: StateFlow<List<Prenotazione>> = _prenotazioniLast7Days.asStateFlow()
+
     // ─── Resoconto uscita ────────────────────────────────────────────
     private val _resocontoState = MutableStateFlow(ResocontoState())
     val resocontoState: StateFlow<ResocontoState> = _resocontoState.asStateFlow()
@@ -85,6 +88,7 @@ class ParcheggioViewModel : ViewModel() {
         loadAutoAttive()
         loadPiani()
         loadConfig()
+        loadIncassiLast7Days()
     }
 
     // ─── Date navigation ─────────────────────────────────────────────
@@ -151,6 +155,26 @@ class ParcheggioViewModel : ViewModel() {
     private fun loadConfig() {
         viewModelScope.launch {
             repository.getConfigurazione().collect { _config.value = it }
+        }
+    }
+
+    fun getLast7Days(): List<String> {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val list = mutableListOf<String>()
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        for (i in 0..6) {
+            list.add(sdf.format(cal.time))
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return list
+    }
+
+    private fun loadIncassiLast7Days() {
+        viewModelScope.launch {
+            repository.getPrenotazioniPerDate(getLast7Days()).collect { list ->
+                _prenotazioniLast7Days.value = list
+            }
         }
     }
 

@@ -92,10 +92,15 @@ fun NuovaPrenotazioneBottomSheet(
 
             // Targa
             FormField(
-                label = "Targa *",
-                placeholder = "ES. AA 123 BB",
+                label = "Targa * (Esatto 7 caratteri)",
+                placeholder = "ES. AA123BB",
                 value = targa,
-                onValueChange = { targa = it.uppercase() },
+                onValueChange = { input ->
+                    val clean = input.filter { it.isLetterOrDigit() }.uppercase()
+                    if (clean.length <= 7) {
+                        targa = clean
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -260,9 +265,10 @@ fun NuovaPrenotazioneBottomSheet(
                 ) {
                     Text("Annulla", style = MaterialTheme.typography.bodyLarge)
                 }
+                val isFormValid = nome.isNotBlank() && targa.length == 7
                 Button(
                     onClick = {
-                        if (nome.isNotBlank() && targa.isNotBlank()) {
+                        if (isFormValid) {
                             viewModel.addPrenotazione(
                                 Prenotazione(
                                     nome = nome.trim(),
@@ -279,9 +285,15 @@ fun NuovaPrenotazioneBottomSheet(
                             onDismiss()
                         }
                     },
+                    enabled = isFormValid,
                     modifier = Modifier.weight(1f).height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Primary,
+                        contentColor = OnPrimary,
+                        disabledContainerColor = OutlineVariant.copy(alpha = 0.5f),
+                        disabledContentColor = OnSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 ) {
                     Text("Conferma", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
                 }

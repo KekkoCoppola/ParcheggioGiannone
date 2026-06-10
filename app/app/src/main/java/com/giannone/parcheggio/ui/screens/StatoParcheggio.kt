@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.sp
 import com.giannone.parcheggio.data.model.Prenotazione
 import com.giannone.parcheggio.theme.*
 import com.giannone.parcheggio.ui.viewmodel.ParcheggioViewModel
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,6 +94,125 @@ fun StatoParcheggioScreen(
                     label = "POSTI LIBERI",
                     value = totalLiberi.toString()
                 )
+            }
+
+            // Sezione Grafico Incassi
+            item {
+                val last7Days = remember { viewModel.getLast7Days() }
+                val prenotazioniLast7Days by viewModel.prenotazioniLast7Days.collectAsState()
+                
+                val incassiPerGiorno = remember(prenotazioniLast7Days, last7Days) {
+                    last7Days.map { date ->
+                        val sum = prenotazioniLast7Days.filter { it.data == date && it.timestampUscita != null }
+                            .sumOf { it.totalePagato }
+                        date to sum
+                    }
+                }
+                
+                val totaleIncassi7Giorni = remember(incassiPerGiorno) {
+                    incassiPerGiorno.sumOf { it.second }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "INCASSI ULTIMI 7 GIORNI",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = OnSurfaceVariant
+                                )
+                                Text(
+                                    "€ ${String.format(Locale.getDefault(), "%.2f", totaleIncassi7Giorni)}",
+                                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Primary
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ShowChart,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(20.dp))
+                        
+                        // Il Grafico a barre
+                        val maxIncasso = remember(incassiPerGiorno) {
+                            val max = incassiPerGiorno.maxOfOrNull { it.second } ?: 0.0
+                            if (max == 0.0) 10.0 else max
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            incassiPerGiorno.forEach { (date, value) ->
+                                val barHeightFraction = (value / maxIncasso).toFloat()
+                                val dayLabel = remember(date) {
+                                    try {
+                                        val inputSdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                        val d = inputSdf.parse(date) ?: Date()
+                                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                                        if (date == today) {
+                                            "Oggi"
+                                        } else {
+                                            SimpleDateFormat("dd MMM", Locale.ITALIAN).format(d)
+                                        }
+                                    } catch (e: Exception) {
+                                        ""
+                                    }
+                                }
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Bottom
+                                ) {
+                                    if (value > 0.0) {
+                                        Text(
+                                            "€${value.toInt()}",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                            color = Primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                    }
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .width(16.dp)
+                                            .fillMaxHeight(barHeightFraction.coerceAtLeast(0.04f))
+                                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                            .background(if (value > 0.0) Primary else OutlineVariant.copy(alpha = 0.5f))
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    
+                                    Text(
+                                        dayLabel,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = OnSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Piani espandibili
