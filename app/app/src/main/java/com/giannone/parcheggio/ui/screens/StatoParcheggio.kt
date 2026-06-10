@@ -36,8 +36,14 @@ fun StatoParcheggioScreen(
 ) {
     val autoAttive by viewModel.autoAttive.collectAsState()
     val piani by viewModel.piani.collectAsState()
-    val totaleAuto = viewModel.totaleAutoParcheggiate()
-    val totalLiberi = viewModel.totalePossiLiberi()
+    
+    val totaleAuto = remember(autoAttive) { autoAttive.size }
+    val totalLiberi = remember(autoAttive, piani) {
+        piani.sumOf { piano ->
+            val occupati = autoAttive.filter { it.piano == piano.nome }.size
+            maxOf(piano.postiTotali - occupati, 0)
+        }
+    }
 
     var expandedPiani by remember { mutableStateOf<Set<String>>(setOf()) }
 
@@ -50,14 +56,9 @@ fun StatoParcheggioScreen(
                         style = MaterialTheme.typography.displayMedium.copy(color = Primary, fontWeight = FontWeight.Bold)
                     )
                 },
-                navigationIcon = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = OnSurface)
-                    }
-                },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Impostazioni", tint = OnSurface)
+                        Icon(Icons.Default.Settings, contentDescription = "Impostazioni", tint = Primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)

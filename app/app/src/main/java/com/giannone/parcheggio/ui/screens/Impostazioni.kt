@@ -46,7 +46,9 @@ fun ImpostazioniScreen(
                     }
                 },
                 actions = {
-                    Icon(Icons.Default.Settings, contentDescription = null, tint = Primary, modifier = Modifier.padding(end = 16.dp))
+                    IconButton(onClick = {}, enabled = false) {
+                        Icon(Icons.Default.Settings, contentDescription = null, tint = Primary)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
             )
@@ -195,7 +197,10 @@ private fun PianoCard(piano: Piano, onUpdate: (Piano) -> Unit, onDelete: () -> U
                 Text("Nome Piano", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
                 OutlinedTextField(
                     value = nomeEdit,
-                    onValueChange = { nomeEdit = it },
+                    onValueChange = {
+                        nomeEdit = it
+                        onUpdate(piano.copy(nome = it, postiTotali = postiEdit.toIntOrNull() ?: piano.postiTotali))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -205,8 +210,7 @@ private fun PianoCard(piano: Piano, onUpdate: (Piano) -> Unit, onDelete: () -> U
                         focusedContainerColor = SurfaceContainerLow,
                         unfocusedContainerColor = Background
                     ),
-                    singleLine = true,
-                    onFocusChanged = { if (!it.isFocused) onUpdate(piano.copy(nome = nomeEdit, postiTotali = postiEdit.toIntOrNull() ?: piano.postiTotali)) }
+                    singleLine = true
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
@@ -214,7 +218,10 @@ private fun PianoCard(piano: Piano, onUpdate: (Piano) -> Unit, onDelete: () -> U
                 Text("Posti totali", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
                 OutlinedTextField(
                     value = postiEdit,
-                    onValueChange = { postiEdit = it },
+                    onValueChange = {
+                        postiEdit = it
+                        onUpdate(piano.copy(nome = nomeEdit, postiTotali = it.toIntOrNull() ?: piano.postiTotali))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -224,8 +231,7 @@ private fun PianoCard(piano: Piano, onUpdate: (Piano) -> Unit, onDelete: () -> U
                         focusedContainerColor = SurfaceContainerLow,
                         unfocusedContainerColor = Background
                     ),
-                    singleLine = true,
-                    onFocusChanged = { if (!it.isFocused) onUpdate(piano.copy(nome = nomeEdit, postiTotali = postiEdit.toIntOrNull() ?: piano.postiTotali)) }
+                    singleLine = true
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))

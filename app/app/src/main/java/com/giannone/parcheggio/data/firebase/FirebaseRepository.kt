@@ -11,7 +11,6 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import java.util.Date
 
 class FirebaseRepository {
 
@@ -23,7 +22,25 @@ class FirebaseRepository {
         val listener = db.collection("prenotazioni")
             .whereEqualTo("data", data)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
+                if (error != null) { return@addSnapshotListener }
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Prenotazione::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun getPrenotazioniPerDate(dateList: List<String>): Flow<List<Prenotazione>> = callbackFlow {
+        if (dateList.isEmpty()) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+        val listener = db.collection("prenotazioni")
+            .whereIn("data", dateList)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { return@addSnapshotListener }
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(Prenotazione::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
@@ -37,7 +54,7 @@ class FirebaseRepository {
             .whereEqualTo("statoIngresso", true)
             .whereEqualTo("timestampUscita", null)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
+                if (error != null) { return@addSnapshotListener }
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(Prenotazione::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
@@ -51,6 +68,7 @@ class FirebaseRepository {
         return docRef.id
     }
 
+    // Ingresso con timestamp automatico (ora corrente)
     suspend fun registraIngresso(id: String) {
         db.collection("prenotazioni").document(id).update(
             mapOf(
@@ -60,11 +78,34 @@ class FirebaseRepository {
         ).await()
     }
 
+    // Ingresso con timestamp manuale
+    suspend fun registraIngressoConTimestamp(id: String, timestamp: Timestamp) {
+        db.collection("prenotazioni").document(id).update(
+            mapOf(
+                "timestampIngresso" to timestamp,
+                "statoIngresso" to true
+            )
+        ).await()
+    }
+
+    // Uscita con timestamp automatico (ora corrente)
     suspend fun registraUscita(id: String, tariffa: Double): Triple<Timestamp, Timestamp, Double> {
         val doc = db.collection("prenotazioni").document(id).get().await()
         val prenotazione = doc.toObject(Prenotazione::class.java)!!
-        val ingresso = prenotazione.timestampIngresso ?: Timestamp.now()
-        val uscita = Timestamp.now()
+        return registraUscitaConTimestamp(id, Timestamp.now(), tariffa, prenotazione.timestampIngresso)
+    }
+
+    // Uscita con timestamp manuale
+    suspend fun registraUscitaConTimestamp(
+        id: String,
+        uscita: Timestamp,
+        tariffa: Double,
+        ingressoOverride: Timestamp? = null
+    ): Triple<Timestamp, Timestamp, Double> {
+        val ingresso = ingressoOverride ?: run {
+            val doc = db.collection("prenotazioni").document(id).get().await()
+            doc.toObject(Prenotazione::class.java)?.timestampIngresso ?: uscita
+        }
         val oreDouble = (uscita.seconds - ingresso.seconds) / 3600.0
         val ore = maxOf(oreDouble, 0.0)
         val totale = kotlin.math.ceil(ore) * tariffa
@@ -88,7 +129,7 @@ class FirebaseRepository {
     fun getPiani(): Flow<List<Piano>> = callbackFlow {
         val listener = db.collection("piani")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
+                if (error != null) { return@addSnapshotListener }
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.toObject(Piano::class.java)?.copy(id = doc.id)
                 } ?: emptyList()
@@ -115,7 +156,7 @@ class FirebaseRepository {
     fun getConfigurazione(): Flow<Configurazione> = callbackFlow {
         val listener = db.collection("configurazione").document("config")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { close(error); return@addSnapshotListener }
+                if (error != null) { return@addSnapshotListener }
                 val config = snapshot?.toObject(Configurazione::class.java) ?: Configurazione()
                 trySend(config)
             }

@@ -218,6 +218,6 @@ private fun ResocontoRow(
         Text(value, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
     }
     if (showDivider) {
-        Divider(modifier = Modifier.padding(horizontal = 16.dp), color = OutlineVariant.copy(alpha = 0.3f))
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = OutlineVariant.copy(alpha = 0.3f))
     }
 }

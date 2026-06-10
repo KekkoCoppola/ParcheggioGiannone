@@ -7,11 +7,15 @@ import com.giannone.parcheggio.data.model.Configurazione
 import com.giannone.parcheggio.data.model.Piano
 import com.giannone.parcheggio.data.model.Prenotazione
 import com.google.firebase.Timestamp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.FlowPreview
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -26,6 +30,7 @@ data class ResocontoState(
     val totalePagato: Double = 0.0
 )
 
+@OptIn(FlowPreview::class)
 class ParcheggioViewModel : ViewModel() {
 
     private val repository = FirebaseRepository()
@@ -38,7 +43,7 @@ class ParcheggioViewModel : ViewModel() {
     private val _prenotazioni = MutableStateFlow<List<Prenotazione>>(emptyList())
     val prenotazioni: StateFlow<List<Prenotazione>> = _prenotazioni.asStateFlow()
 
-    // ─── Auto attualmente parcheggiate (ingresso senza uscita) ──────
+    // ─── Auto attualmente parcheggiate ──────────────────────────────
     private val _autoAttive = MutableStateFlow<List<Prenotazione>>(emptyList())
     val autoAttive: StateFlow<List<Prenotazione>> = _autoAttive.asStateFlow()
 
@@ -65,8 +70,18 @@ class ParcheggioViewModel : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    // Job per il listener prenotazioni (cancellabile quando cambia data)
+    private var prenotazioniJob: Job? = null
+
     init {
-        loadPrenotazioniPerData(_selectedDate.value)
+        // Collect selectedDate changes with a debounce to prevent listener spam and UI locks
+        viewModelScope.launch {
+            _selectedDate
+                .debounce(300)
+                .collect { date ->
+                    loadPrenotazioniPerData(date)
+                }
+        }
         loadAutoAttive()
         loadPiani()
         loadConfig()
@@ -75,22 +90,22 @@ class ParcheggioViewModel : ViewModel() {
     // ─── Date navigation ─────────────────────────────────────────────
     fun goToPreviousDay() {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = java.util.Calendar.getInstance()
+        val cal = Calendar.getInstance()
         cal.time = sdf.parse(_selectedDate.value) ?: Date()
-        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
-        val newDate = sdf.format(cal.time)
-        _selectedDate.value = newDate
-        loadPrenotazioniPerData(newDate)
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+        setSelectedDate(sdf.format(cal.time))
     }
 
     fun goToNextDay() {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = java.util.Calendar.getInstance()
+        val cal = Calendar.getInstance()
         cal.time = sdf.parse(_selectedDate.value) ?: Date()
-        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
-        val newDate = sdf.format(cal.time)
-        _selectedDate.value = newDate
-        loadPrenotazioniPerData(newDate)
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        setSelectedDate(sdf.format(cal.time))
+    }
+
+    fun setSelectedDate(date: String) {
+        _selectedDate.value = date
     }
 
     fun setSearchQuery(q: String) { _searchQuery.value = q }
@@ -107,7 +122,8 @@ class ParcheggioViewModel : ViewModel() {
 
     // ─── Loaders ─────────────────────────────────────────────────────
     private fun loadPrenotazioniPerData(data: String) {
-        viewModelScope.launch {
+        prenotazioniJob?.cancel()
+        prenotazioniJob = viewModelScope.launch {
             repository.getPrenotazioniPerData(data).collect {
                 _prenotazioni.value = it
             }
@@ -116,8 +132,12 @@ class ParcheggioViewModel : ViewModel() {
 
     private fun loadAutoAttive() {
         viewModelScope.launch {
-            repository.getAllPrenotazioniAttive().collect {
-                _autoAttive.value = it
+            try {
+                repository.getAllPrenotazioniAttive().collect { list ->
+                    _autoAttive.value = list
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore nel caricamento auto attive: ${e.message}"
             }
         }
     }
@@ -144,6 +164,13 @@ class ParcheggioViewModel : ViewModel() {
         }
     }
 
+    fun deletePrenotazione(id: String) {
+        viewModelScope.launch {
+            try { repository.deletePrenotazione(id) }
+            catch (e: Exception) { _errorMessage.value = e.message }
+        }
+    }
+
     fun registraIngresso(id: String) {
         viewModelScope.launch {
             try { repository.registraIngresso(id) }
@@ -151,31 +178,76 @@ class ParcheggioViewModel : ViewModel() {
         }
     }
 
+    fun registraIngressoManuale(id: String, hour: Int, minute: Int) {
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, hour)
+                cal.set(Calendar.MINUTE, minute)
+                cal.set(Calendar.SECOND, 0)
+                repository.registraIngressoConTimestamp(id, Timestamp(cal.time))
+            } catch (e: Exception) { _errorMessage.value = e.message }
+        }
+    }
+
     fun registraUscita(prenotazione: Prenotazione, onComplete: () -> Unit) {
         viewModelScope.launch {
             try {
-                val tariffa = when (prenotazione.tipoTariffa) {
-                    "Tariffa Giornaliera" -> _config.value.tariffaGiornaliera
-                    "Tariffa Notturna"    -> _config.value.tariffaNotturna
-                    "Tariffa Eventi"      -> _config.value.tariffaEventi
-                    else                  -> _config.value.tariffaOraria
-                }
+                val tariffa = getTariffa(prenotazione.tipoTariffa)
                 val (ingresso, uscita, totale) = repository.registraUscita(prenotazione.id, tariffa)
                 val oreDouble = (uscita.seconds - ingresso.seconds) / 3600.0
-                _resocontoState.value = ResocontoState(
-                    nomeCliente = "${prenotazione.nome} ${prenotazione.cognome}",
-                    targa = prenotazione.targa,
-                    piano = prenotazione.piano,
-                    timestampIngresso = ingresso,
-                    timestampUscita = uscita,
-                    totaleOre = maxOf(oreDouble, 0.0),
-                    tipoTariffa = prenotazione.tipoTariffa,
-                    totalePagato = totale
-                )
+                _resocontoState.value = buildResoconto(prenotazione, ingresso, uscita, maxOf(oreDouble, 0.0), totale)
                 onComplete()
             } catch (e: Exception) { _errorMessage.value = e.message }
         }
     }
+
+    fun registraUscitaManuale(prenotazione: Prenotazione, hour: Int, minute: Int, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, hour)
+                cal.set(Calendar.MINUTE, minute)
+                cal.set(Calendar.SECOND, 0)
+                val uscitaTimestamp = Timestamp(cal.time)
+                val tariffa = getTariffa(prenotazione.tipoTariffa)
+                val (ingresso, uscita, totale) = repository.registraUscitaConTimestamp(
+                    id = prenotazione.id,
+                    uscita = uscitaTimestamp,
+                    tariffa = tariffa,
+                    ingressoOverride = prenotazione.timestampIngresso
+                )
+                val oreDouble = (uscita.seconds - ingresso.seconds) / 3600.0
+                _resocontoState.value = buildResoconto(prenotazione, ingresso, uscita, maxOf(oreDouble, 0.0), totale)
+                onComplete()
+            } catch (e: Exception) { _errorMessage.value = e.message }
+        }
+    }
+
+    // ─── Helpers privati ─────────────────────────────────────────────
+    private fun getTariffa(tipo: String): Double = when (tipo) {
+        "Tariffa Giornaliera" -> _config.value.tariffaGiornaliera
+        "Tariffa Notturna"    -> _config.value.tariffaNotturna
+        "Tariffa Eventi"      -> _config.value.tariffaEventi
+        else                  -> _config.value.tariffaOraria
+    }
+
+    private fun buildResoconto(
+        prenotazione: Prenotazione,
+        ingresso: Timestamp,
+        uscita: Timestamp,
+        ore: Double,
+        totale: Double
+    ) = ResocontoState(
+        nomeCliente = "${prenotazione.nome} ${prenotazione.cognome}",
+        targa = prenotazione.targa,
+        piano = prenotazione.piano,
+        timestampIngresso = ingresso,
+        timestampUscita = uscita,
+        totaleOre = ore,
+        tipoTariffa = prenotazione.tipoTariffa,
+        totalePagato = totale
+    )
 
     // ─── Piani CRUD ──────────────────────────────────────────────────
     fun addPiano(nome: String, posti: Int) {
@@ -209,12 +281,11 @@ class ParcheggioViewModel : ViewModel() {
 
     fun clearError() { _errorMessage.value = null }
 
-    // ─── Helpers ─────────────────────────────────────────────────────
+    // ─── Public helpers ──────────────────────────────────────────────
     fun displayDate(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val today = todayString()
         return when (_selectedDate.value) {
-            today -> "Oggi"
+            todayString() -> "Oggi"
             else -> {
                 val d = sdf.parse(_selectedDate.value) ?: Date()
                 SimpleDateFormat("dd MMM yyyy", Locale.ITALIAN).format(d)

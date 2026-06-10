@@ -1,10 +1,11 @@
 package com.giannone.parcheggio
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,15 +25,51 @@ fun MainNavigation() {
     val backStack = rememberNavBackStack(Prenotazioni)
     val viewModel: ParcheggioViewModel = viewModel()
 
-    // Determine active tab from top of backstack
     val currentDest = backStack.lastOrNull()
-    val isPrenotazioniTab = currentDest is Prenotazioni || currentDest is DettaglioPrenotazione || currentDest is ResocontoUscita
-    val isParcheggioTab = currentDest is StatoParcheggio
+    val isPrenotazioniActive = currentDest is Prenotazioni
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
+            transitionSpec = {
+                val initialKey = initialState.key
+                val targetKey = targetState.key
+                val isTabSwitch = (initialKey is Prenotazioni && targetKey is StatoParcheggio) ||
+                                  (initialKey is StatoParcheggio && targetKey is Prenotazioni)
+                if (isTabSwitch) {
+                    fadeIn(animationSpec = tween(220, easing = LinearEasing)) togetherWith
+                    fadeOut(animationSpec = tween(220, easing = LinearEasing))
+                } else {
+                    slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = tween(300, easing = EaseInOutCubic)
+                    ) togetherWith
+                    slideOutHorizontally(
+                        targetOffsetX = { -it / 4 },
+                        animationSpec = tween(300, easing = EaseInOutCubic)
+                    ) + fadeOut(animationSpec = tween(300))
+                }
+            },
+            popTransitionSpec = {
+                val initialKey = initialState.key
+                val targetKey = targetState.key
+                val isTabSwitch = (initialKey is Prenotazioni && targetKey is StatoParcheggio) ||
+                                  (initialKey is StatoParcheggio && targetKey is Prenotazioni)
+                if (isTabSwitch) {
+                    fadeIn(animationSpec = tween(220, easing = LinearEasing)) togetherWith
+                    fadeOut(animationSpec = tween(220, easing = LinearEasing))
+                } else {
+                    slideInHorizontally(
+                        initialOffsetX = { -it / 4 },
+                        animationSpec = tween(300, easing = EaseInOutCubic)
+                    ) + fadeIn(animationSpec = tween(300)) togetherWith
+                    slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = tween(300, easing = EaseInOutCubic)
+                    )
+                }
+            },
             entryProvider = entryProvider {
                 entry<Prenotazioni> {
                     PrenotazioniScreen(
@@ -63,7 +100,6 @@ fun MainNavigation() {
                     ResocontoUscitaScreen(
                         viewModel = viewModel,
                         onBack = {
-                            // Pop back to Prenotazioni
                             while (backStack.size > 1) backStack.removeLastOrNull()
                         }
                     )
@@ -77,15 +113,15 @@ fun MainNavigation() {
             }
         )
 
-        // Bottom Nav Bar — only show on main tabs (not detail/settings screens)
+        // Bottom nav: solo sulle schermate principali
         if (currentDest is Prenotazioni || currentDest is StatoParcheggio) {
             BottomNavBar(
-                isPrenotazioniActive = isPrenotazioniTab,
+                isPrenotazioniActive = isPrenotazioniActive,
                 modifier = Modifier.align(Alignment.BottomCenter),
                 onPrenotazioniClick = {
                     if (currentDest !is Prenotazioni) {
                         while (backStack.size > 1) backStack.removeLastOrNull()
-                        if (backStack.lastOrNull() !is Prenotazioni) backStack.add(Prenotazioni)
+                        backStack.add(Prenotazioni)
                     }
                 },
                 onParcheggioClick = {
@@ -110,56 +146,77 @@ fun BottomNavBar(
         modifier = modifier.fillMaxWidth(),
         color = SurfaceContainerLowest,
         shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
                 .navigationBarsPadding(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Prenotazioni Tab
-            if (isPrenotazioniActive) {
-                Button(
-                    onClick = onPrenotazioniClick,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary),
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
-                ) {
-                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Prenotazioni", style = MaterialTheme.typography.labelLarge)
+            // Tab Prenotazioni
+            NavTabItem(
+                isActive = isPrenotazioniActive,
+                label = "Prenotazioni",
+                onClick = onPrenotazioniClick,
+                modifier = Modifier.weight(1f),
+                icon = {
+                    Icon(
+                        Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (isPrenotazioniActive) OnPrimary else OnSurface
+                    )
                 }
-            } else {
-                TextButton(onClick = onPrenotazioniClick) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = OnSurface)
-                        Text("Prenotazioni", style = MaterialTheme.typography.labelMedium, color = OnSurface)
-                    }
+            )
+            // Tab Parcheggio
+            NavTabItem(
+                isActive = !isPrenotazioniActive,
+                label = "Parcheggio",
+                onClick = onParcheggioClick,
+                modifier = Modifier.weight(1f),
+                icon = {
+                    Text(
+                        "P",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (!isPrenotazioniActive) OnPrimary else OnSurface
+                    )
                 }
-            }
+            )
+        }
+    }
+}
 
-            // Parcheggio Tab
-            if (!isPrenotazioniActive) {
-                Button(
-                    onClick = onParcheggioClick,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary),
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
-                ) {
-                    Text("P", style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Parcheggio", style = MaterialTheme.typography.labelLarge)
-                }
-            } else {
-                TextButton(onClick = onParcheggioClick) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("P", style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold), color = OnSurface)
-                        Text("Parcheggio", style = MaterialTheme.typography.labelMedium, color = OnSurface)
-                    }
-                }
-            }
+@Composable
+private fun NavTabItem(
+    isActive: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(52.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = if (isActive) Primary else SurfaceContainer,
+        contentColor = if (isActive) OnPrimary else OnSurface
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            icon()
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium),
+                color = if (isActive) OnPrimary else OnSurface
+            )
         }
     }
 }
