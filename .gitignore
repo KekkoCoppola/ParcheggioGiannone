@@ -1,0 +1,39 @@
+# ─── SEGRETI — NON COMMITTARE MAI ───────────────────────────────────────────
+google-services.json
+GoogleService-Info.plist
+*.keystore
+*.jks
+*.p12
+*.p8
+local.properties
+secrets.properties
+.env
+.env.*
+
+# ─── Android Build ───────────────────────────────────────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+app/build/
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.so
+
+# ─── Android Studio / IntelliJ ───────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db
+
+# ─── Kotlin ──────────────────────────────────────────────────────────────────
+*.class
+
+# ─── Proguard ────────────────────────────────────────────────────────────────
+proguard/
