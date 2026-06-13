@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.giannone.parcheggio.theme.*
 import com.giannone.parcheggio.ui.viewmodel.ParcheggioViewModel
 import com.giannone.parcheggio.ui.viewmodel.ResocontoState
+import com.giannone.parcheggio.utils.PdfGenerator
 import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +30,7 @@ fun ResocontoUscitaScreen(
     onBack: () -> Unit
 ) {
     val resoconto by viewModel.resocontoState.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -175,6 +178,30 @@ fun ResocontoUscitaScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // Pulsante condividi PDF
+            OutlinedButton(
+                onClick = { PdfGenerator.generateAndShare(context, resoconto) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Primary)
+            ) {
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Condividi Ricevuta PDF",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Torna alla lista
             Button(
