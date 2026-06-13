@@ -202,14 +202,20 @@ class ParcheggioViewModel : ViewModel() {
         }
     }
 
-    fun registraIngressoManuale(id: String, hour: Int, minute: Int) {
+    fun registraIngressoManuale(prenotazione: Prenotazione, hour: Int, minute: Int) {
         viewModelScope.launch {
             try {
                 val cal = Calendar.getInstance()
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val parsedDate = sdf.parse(prenotazione.data)
+                if (parsedDate != null) {
+                    cal.time = parsedDate
+                }
                 cal.set(Calendar.HOUR_OF_DAY, hour)
                 cal.set(Calendar.MINUTE, minute)
                 cal.set(Calendar.SECOND, 0)
-                repository.registraIngressoConTimestamp(id, Timestamp(cal.time))
+                cal.set(Calendar.MILLISECOND, 0)
+                repository.registraIngressoConTimestamp(prenotazione.id, Timestamp(cal.time))
             } catch (e: Exception) { _errorMessage.value = e.message }
         }
     }
@@ -217,8 +223,14 @@ class ParcheggioViewModel : ViewModel() {
     fun registraUscita(prenotazione: Prenotazione, onComplete: () -> Unit) {
         viewModelScope.launch {
             try {
-                val tariffa = getTariffa(prenotazione.tipoTariffa)
-                val (ingresso, uscita, totale) = repository.registraUscita(prenotazione.id, tariffa)
+                val tariffaOraria = _config.value.tariffaOraria
+                val tariffaSpecifica = getTariffa(prenotazione.tipoTariffa)
+                val (ingresso, uscita, totale) = repository.registraUscita(
+                    prenotazione.id,
+                    prenotazione.tipoTariffa,
+                    tariffaOraria,
+                    tariffaSpecifica
+                )
                 val oreDouble = (uscita.seconds - ingresso.seconds) / 3600.0
                 _resocontoState.value = buildResoconto(prenotazione, ingresso, uscita, maxOf(oreDouble, 0.0), totale)
                 onComplete()
@@ -229,17 +241,40 @@ class ParcheggioViewModel : ViewModel() {
     fun registraUscitaManuale(prenotazione: Prenotazione, hour: Int, minute: Int, onComplete: () -> Unit) {
         viewModelScope.launch {
             try {
-                val cal = Calendar.getInstance()
-                cal.set(Calendar.HOUR_OF_DAY, hour)
-                cal.set(Calendar.MINUTE, minute)
-                cal.set(Calendar.SECOND, 0)
-                val uscitaTimestamp = Timestamp(cal.time)
-                val tariffa = getTariffa(prenotazione.tipoTariffa)
+                val calIngresso = Calendar.getInstance()
+                val ingressoTimestamp = prenotazione.timestampIngresso
+                if (ingressoTimestamp != null) {
+                    calIngresso.time = ingressoTimestamp.toDate()
+                } else {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val parsedDate = sdf.parse(prenotazione.data)
+                    if (parsedDate != null) {
+                        calIngresso.time = parsedDate
+                    }
+                }
+
+                val calUscita = Calendar.getInstance()
+                calUscita.time = calIngresso.time
+                calUscita.set(Calendar.HOUR_OF_DAY, hour)
+                calUscita.set(Calendar.MINUTE, minute)
+                calUscita.set(Calendar.SECOND, 0)
+                calUscita.set(Calendar.MILLISECOND, 0)
+
+                // Se l'ora di uscita impostata è precedente a quella di ingresso,
+                // significa che la sosta ha superato la mezzanotte e l'uscita è il giorno successivo.
+                if (calUscita.timeInMillis < calIngresso.timeInMillis) {
+                    calUscita.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                val uscitaTimestamp = Timestamp(calUscita.time)
+
+                val tariffaOraria = _config.value.tariffaOraria
+                val tariffaSpecifica = getTariffa(prenotazione.tipoTariffa)
                 val (ingresso, uscita, totale) = repository.registraUscitaConTimestamp(
                     id = prenotazione.id,
                     uscita = uscitaTimestamp,
-                    tariffa = tariffa,
-                    ingressoOverride = prenotazione.timestampIngresso
+                    tipoTariffa = prenotazione.tipoTariffa,
+                    tariffaOraria = tariffaOraria,
+                    tariffaSpecifica = tariffaSpecifica
                 )
                 val oreDouble = (uscita.seconds - ingresso.seconds) / 3600.0
                 _resocontoState.value = buildResoconto(prenotazione, ingresso, uscita, maxOf(oreDouble, 0.0), totale)

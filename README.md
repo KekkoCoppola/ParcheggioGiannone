@@ -1,4 +1,12 @@
 # 🚗 Parcheggio Giannone — Smart Parking Manager
+<div align="center">
+  <details open>
+    <summary><b>Parcheggio Giannone</b></summary>
+    <br />
+    <img src="Design/LogoBG.png" alt="Cloto Logo" width="180" />
+    <br /><br />
+  </details>
+</div>
 
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=for-the-badge&logo=android)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-purple?style=for-the-badge&logo=kotlin)](https://kotlinlang.org)

@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import com.giannone.parcheggio.data.model.Prenotazione
 import com.giannone.parcheggio.theme.*
 import com.giannone.parcheggio.ui.viewmodel.ParcheggioViewModel
+import com.giannone.parcheggio.ui.viewmodel.ResocontoState
+import com.giannone.parcheggio.utils.PdfGenerator
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +38,7 @@ fun DettaglioPrenotazioneScreen(
 ) {
     val prenotazioni by viewModel.prenotazioni.collectAsState()
     val autoAttive by viewModel.autoAttive.collectAsState()
+    val context = LocalContext.current
 
     val prenotazione = remember(prenotazioni, autoAttive, prenotazioneId) {
         (prenotazioni + autoAttive).firstOrNull { it.id == prenotazioneId }
@@ -251,6 +255,40 @@ fun DettaglioPrenotazioneScreen(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+                // Pulsante condividi ricevuta PDF
+                OutlinedButton(
+                    onClick = {
+                        val resoconto = ResocontoState(
+                            nomeCliente = "${prenotazione.nome} ${prenotazione.cognome}",
+                            targa = prenotazione.targa,
+                            piano = prenotazione.piano,
+                            timestampIngresso = prenotazione.timestampIngresso,
+                            timestampUscita = prenotazione.timestampUscita,
+                            totaleOre = prenotazione.totaleOre,
+                            tipoTariffa = prenotazione.tipoTariffa,
+                            totalePagato = prenotazione.totalePagato
+                        )
+                        PdfGenerator.generateAndShare(context, resoconto)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Primary)
+                ) {
+                    Icon(
+                        Icons.Default.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Condividi Ricevuta PDF",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -318,7 +356,7 @@ fun DettaglioPrenotazioneScreen(
                     onClick = {
                         if (!giaEntrato) {
                             viewModel.registraIngressoManuale(
-                                prenotazione.id,
+                                prenotazione,
                                 timePickerState.hour,
                                 timePickerState.minute
                             )
